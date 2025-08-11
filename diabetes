@@ -1,0 +1,134 @@
+import pandas as pd
+import copy
+import math
+
+# Step 1: Load any dataset
+#file_path = input("Enter CSV file path: ")
+df = pd.read_csv('diabetes.csv')
+
+print("\nColumns in dataset:", list(df.columns))
+target_col = input("Enter the name of the target column: ")
+
+# Step 2: Prepare attributes and data
+attributes = [col for col in df.columns if col != target_col]
+target_ind = len(attributes)
+X = df[attributes + [target_col]].values.tolist()
+
+class Node:
+    def __init__(self):
+        self.value = None       # Attribute name or leaf value
+        self.decision = None    # Decision value from parent node
+        self.childs = []
+
+# Step 3: Entropy calculation
+def findEnt(data, rows):
+    class_counts = {}
+    for i in rows:
+        label = data[i][target_ind]
+        class_counts[label] = class_counts.get(label, 0) + 1
+
+    total = len(rows)
+    entropy = 0
+    for count in class_counts.values():
+        p = count / total
+        entropy -= p * math.log2(p)
+
+    # If pure node, return the class label
+    if len(class_counts) == 1:
+        return entropy, list(class_counts.keys())[0]
+    return entropy, None
+
+# Step 4: Info gain calculation
+def findMaxGain(data, rows, cols):
+    mg = 0
+    retidx = -1
+    entropy, ans = findEnt(data, rows)
+    print(f"\nCurrent set entropy = {entropy:.4f}")
+    if entropy == 0:
+        return mg, retidx, ans
+
+    print("Attribute Information Gains:")
+    for j in cols:
+        mydict = {}
+        for i in rows:
+            key = data[i][j]
+            mydict[key] = mydict.get(key, 0) + 1
+
+        weighted_ent_sum = 0
+        for key in mydict:
+            sub_rows = [i for i in rows if data[i][j] == key]
+            sub_entropy, _ = findEnt(data, sub_rows)
+            weighted_ent_sum += (len(sub_rows) / len(rows)) * sub_entropy
+
+        info_gain = entropy - weighted_ent_sum
+        print(f"{attributes[j]}: IG = {info_gain:.4f}, weighted entropy = {weighted_ent_sum:.4f}")
+
+        if info_gain > mg:
+            mg = info_gain
+            retidx = j
+
+    return mg, retidx, ans
+
+# Step 5: Tree building
+def buildTree(data, rows, cols):
+    mg, idx, ans = findMaxGain(data, rows, cols)
+    root = Node()
+
+    if mg == 0:
+        root.value = ans
+        return root
+
+    root.value = attributes[idx]
+    mydict = {}
+    for i in rows:
+        key = data[i][idx]
+        mydict[key] = mydict.get(key, 0) + 1
+
+    newcols = copy.deepcopy(cols)
+    newcols.remove(idx)
+
+    for key in mydict:
+        newrows = [i for i in rows if data[i][idx] == key]
+        temp = buildTree(data, newrows, newcols)
+        temp.decision = key
+        root.childs.append(temp)
+
+    return root
+
+# Step 6: Traversing
+def traverse(root, depth=0):
+    prefix = "   " * depth
+    if root.decision is not None:
+        print(f"{prefix}[{root.decision}] -> {root.value}")
+    else:
+        print(f"{prefix}{root.value}")
+    for child in root.childs:
+        traverse(child, depth + 1)
+
+# Step 7: Prediction
+def predict(root, sample):
+    if not root.childs:
+        return root.value
+    attr_ind = attributes.index(root.value)
+    for child in root.childs:
+        if sample[attr_ind] == child.decision:
+            return predict(child, sample)
+    return None
+
+# Step 8: Main execution
+def calculate():
+    rows = list(range(len(X)))
+    cols = list(range(len(attributes)))
+    root = buildTree(X, rows, cols)
+    root.decision = "Start"
+    traverse(root)
+
+    print("\n--- Prediction ---")
+    sample_input = []
+    for attr in attributes:
+        val = input(f"Enter value for {attr}: ")
+        sample_input.append(val)
+    prediction = predict(root, sample_input)
+    print(f"{sample_input} => {prediction}")
+
+calculate()
