@@ -1,0 +1,124 @@
+import pandas as pd
+import numpy as np
+import math
+
+# Entropy calculation
+def entropy(target_col):
+    elements, counts = np.unique(target_col, return_counts=True)
+    total = np.sum(counts)
+    ent = -np.sum([(count/total) * math.log2(count/total) for count in counts if count > 0])
+    return ent
+
+# Attribute entropy
+def attr_entropy(data, attr, target, threshold=None):
+    if threshold is not None:  # numerical attribute
+        left_split = data[data[attr] < threshold]
+        right_split = data[data[attr] >= threshold]
+        total = len(data)
+        return (len(left_split)/total) * entropy(left_split[target]) + \
+               (len(right_split)/total) * entropy(right_split[target])
+    else:  # categorical attribute
+        values, counts = np.unique(data[attr], return_counts=True)
+        total = np.sum(counts)
+        return np.sum([(counts[i]/total) * entropy(data[data[attr] == values[i]][target])
+                       for i in range(len(values))])
+
+# Info gain
+def info_gain(data, attr, target, threshold=None):
+    total_ent = entropy(data[target])
+    attr_ent = attr_entropy(data, attr, target, threshold)
+    return total_ent - attr_ent
+
+# Split info
+def split_info(data, attr, threshold=None):
+    if threshold is not None:  # numerical
+        left_split = data[data[attr] < threshold]
+        right_split = data[data[attr] >= threshold]
+        total = len(data)
+        splits = [len(left_split), len(right_split)]
+    else:  # categorical
+        _, counts = np.unique(data[attr], return_counts=True)
+        splits = counts
+        total = np.sum(counts)
+    return -np.sum([(c/total) * math.log2(c/total) for c in splits if c > 0])
+
+# Gain ratio (with printing)
+def gain_ratio(data, attr, target, verbose=False):
+    if np.issubdtype(data[attr].dtype, np.number):  # numerical feature
+        values = np.sort(data[attr].unique())
+        if len(values) == 1:  # all values same
+            return 0, None
+        thresholds = [(values[i] + values[i+1])/2 for i in range(len(values)-1)]
+        best_gain_ratio = -1
+        best_threshold = None
+        for t in thresholds:
+            ig = info_gain(data, attr, target, threshold=t)
+            si = split_info(data, attr, threshold=t)
+            gr = ig/si if si != 0 else 0
+            if verbose:
+                print(f"[NUM] {attr} | Threshold={t:.3f} | InfoGain={ig:.4f} | SplitInfo={si:.4f} | GainRatio={gr:.4f}")
+            if gr > best_gain_ratio:
+                best_gain_ratio = gr
+                best_threshold = t
+        return best_gain_ratio, best_threshold
+    else:  # categorical feature
+        ig = info_gain(data, attr, target)
+        si = split_info(data, attr)
+        gr = ig/si if si != 0 else 0
+        if verbose:
+            print(f"{attr} | InfoGain={ig:.4f} | SplitInfo={si:.4f} | GainRatio={gr:.4f}")
+        return gr, None
+
+# Recursive C4.5 algorithm
+def C45(data, orig_data, features, target, parent_class=None, depth=0):
+    prefix = "   " * depth
+    if len(np.unique(data[target])) == 1:
+        return np.unique(data[target])[0]
+    elif len(data) == 0:
+        return np.unique(orig_data[target])[np.argmax(np.unique(orig_data[target], return_counts=True)[1])]
+    elif len(features) == 0:
+        return parent_class
+    else:
+        parent_class = np.unique(data[target])[np.argmax(np.unique(data[target], return_counts=True)[1])]
+        
+        print(f"\n{prefix}Entropy(Target) = {entropy(data[target]):.4f}")
+        print(f"{prefix}Checking features...")
+
+        # Find best feature
+        gains = [gain_ratio(data, f, target, verbose=True) for f in features]
+        best_feature_index = np.argmax([g[0] for g in gains])
+        best_feature = features[best_feature_index]
+        best_gain, best_threshold = gains[best_feature_index]
+
+        print(f"{prefix}--> Best Feature = {best_feature}, Best GainRatio = {best_gain:.4f}, Threshold = {best_threshold}")
+
+        if best_gain == 0:
+            return parent_class
+
+        tree = {best_feature: {}}
+
+        if best_threshold is not None:  # numerical split
+            left_split = data[data[best_feature] < best_threshold]
+            right_split = data[data[best_feature] >= best_threshold]
+            sub_feat = [f for f in features if f != best_feature]
+            tree[best_feature][f"< {best_threshold}"] = C45(left_split, orig_data, sub_feat, target, parent_class, depth+1)
+            tree[best_feature][f">= {best_threshold}"] = C45(right_split, orig_data, sub_feat, target, parent_class, depth+1)
+        else:  # categorical split
+            for value in np.unique(data[best_feature]):
+                sub_data = data[data[best_feature] == value]
+                sub_feat = [f for f in features if f != best_feature]
+                tree[best_feature][value] = C45(sub_data, orig_data, sub_feat, target, parent_class, depth+1)
+
+        return tree
+
+
+# ==== Usage ====
+df = pd.read_csv("diabetes.csv")
+target_attr = 'Outcome'
+features = [f for f in df.columns if f != target_attr]
+
+decision_tree = C45(df, df, features, target_attr)
+
+import pprint
+print("\nFinal Decision Tree:")
+pprint.pprint(decision_tree)
