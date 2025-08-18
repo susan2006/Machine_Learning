@@ -1,0 +1,82 @@
+import pandas as pd
+import numpy as np
+import math
+
+df = pd.read_csv('studentmarks.csv')
+df.head()
+def entropy(target_col):
+    elements, counts = np.unique(target_col, return_counts=True)
+    ans = 0
+    total = np.sum(counts)
+    for count in counts:
+        p_i = count / total
+        ans -= p_i * math.log2(p_i)
+    print(f"Entropy: {ans:.4f} for values {elements} with counts {counts}")
+    return ans
+
+def attr_entropy(data, attr, target):
+    values, counts = np.unique(data[attr], return_counts=True)
+    ans = 0
+    total = np.sum(counts)
+    for i in range(len(values)):
+        subdata = data[data[attr] == values[i]]
+        subent = entropy(subdata[target])
+        ans += (counts[i] / total) * subent
+    print(f"Entropy of attribute '{attr}': {ans:.4f}")
+    return ans
+
+def info_gain(data, attr, target):
+    total_ent = entropy(data[target])
+    attr_ent = attr_entropy(data, attr, target)
+    ig = total_ent - attr_ent
+    print(f"Info Gain for attribute '{attr}': {ig:.4f}")
+    return ig
+
+def split_info(data, attr):
+    elements, counts = np.unique(data[attr], return_counts=True)
+    total = np.sum(counts)
+    ans = 0
+    for count in counts:
+        p_i = count / total
+        ans -= p_i * math.log2(p_i)
+    print(f"Split Info for attribute '{attr}': {ans:.4f}")
+    return ans
+
+def gain_ratio(data, attr, target):
+    ig = info_gain(data, attr, target)
+    si = split_info(data, attr)
+    if si == 0:
+        gr = 0
+    else:
+        gr = ig / si
+    print(f"Gain Ratio for attribute '{attr}': {gr:.4f}\n")
+    return gr
+
+def C45(data, orig_data, features, target, parent_class=None):
+    if len(np.unique(data[target])) == 1:
+        return np.unique(data[target])[0]
+    elif len(data) == 0:
+        return np.unique(orig_data[target])[np.argmax(np.unique(orig_data[target], return_counts=True)[1])]
+    elif len(features) == 0:
+        return parent_class
+    else:
+        parent_class = np.unique(data[target])[np.argmax(np.unique(data[target], return_counts=True)[1])]
+        print(f"\nEvaluating gain ratio for features: {features}")
+        gainr = [gain_ratio(data, f, target) for f in features]
+        best_feature_index = np.argmax(gainr)
+        best_feature = features[best_feature_index]
+        print(f"Best feature to split on: '{best_feature}'\n")
+        tree = {best_feature: {}}
+        for value in np.unique(data[best_feature]):
+            sub_data = data[data[best_feature] == value]
+            sub_feat = [f for f in features if f != best_feature]
+            subtree = C45(sub_data, orig_data, sub_feat, target, parent_class)
+            tree[best_feature][value] = subtree
+    return tree
+
+target_attr = 'JOB OFFER'
+features = [f for f in df.columns if f != target_attr]
+decision_tree = C45(df, df, features, target_attr)
+
+import pprint
+pprint.pprint(decision_tree)
