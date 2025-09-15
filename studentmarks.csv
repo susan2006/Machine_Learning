@@ -1,0 +1,11 @@
+CGPA,INTERACTIVE,PRACTICE KNOWLEDGE,COMMUNICATION SKILL,JOB OFFER
+>=9,Y,vg,g,Y
+>=8,N,g,m,Y
+>=9,N,avg,p,N
+<8,N,avg,g,N
+>=8,Y,g,m,Y
+>=9,Y,g,m,Y
+<8,Y,g,p,N
+>=9,N,vg,g,Y
+>=8,Y,g,g,Y
+>=8,Y,avg,g,Y
